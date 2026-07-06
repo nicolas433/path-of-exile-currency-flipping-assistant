@@ -20,6 +20,18 @@ public static partial class RatioParser
     [GeneratedRegex(@"\d*\.?\d+")]
     private static partial Regex LeadingNumber();
 
+    // The game marks aggregated worse offers with a leading "<". OCR often
+    // renders that glyph as a guillemet or other angle character, so we treat
+    // any of these as the aggregate marker.
+    private static readonly char[] AggregateMarkers =
+    {
+        '<',        // less-than
+        '«',   // « left-pointing double angle quotation mark
+        '‹',   // ‹ single left-pointing angle quotation mark
+        '≤',   // ≤ less-than-or-equal
+        '⟨',   // ⟨ mathematical left angle bracket
+    };
+
     /// <summary>
     /// Parses every "X : Y" ratio line in <paramref name="text"/>, classifying
     /// each as a bid ("X : 1") or ask ("1 : X"). Lines with a "&lt;" aggregate
@@ -36,7 +48,7 @@ public static partial class RatioParser
         foreach (var rawLine in text.Split('\n'))
         {
             var line = rawLine.Replace(';', ':').Trim();
-            if (!line.Contains(':') || line.Contains('<'))
+            if (!line.Contains(':') || line.IndexOfAny(AggregateMarkers) >= 0)
                 continue;
 
             var match = RatioLine().Match(line);

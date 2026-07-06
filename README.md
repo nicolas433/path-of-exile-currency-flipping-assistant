@@ -65,14 +65,18 @@ Windows.
 
 ## Status
 
-- [x] **MVP step 1** — ported and tested business logic (ratio parsing, outlier
-      filtering, flip calculation, warnings). 21 passing tests.
-- [ ] Screen capture of the ratio panel (`Windows.Graphics.Capture`)
-- [ ] OCR (`Windows.Media.Ocr`, Tesseract fallback) + image preprocessing
-- [ ] Calibration UI (draw the ratio-panel rectangle, saved per resolution)
-- [ ] Global hotkey capture flow
-- [ ] Click-through WPF overlay showing the result panel
-- [ ] Phase 2: cycle history, stock reading, multi-pair profiles, watch mode
+Working end-to-end: the overlay reads the live game and shows the flip.
+
+- [x] Tested business logic (ratio parsing, outlier filtering, flip calc, warnings) — 44 tests
+- [x] Screen capture of the exchange region + image preprocessing (upscale + grayscale + contrast)
+- [x] OCR via `Windows.Media.Ocr`
+- [x] One-rectangle calibration (with a 1080p default) + configurable numpad hotkeys
+- [x] Click-through WPF overlay, tray icon, editable budget, whole-orb order sizing
+- [x] Currency-name scraping by OCR word position (works for any pair)
+- [x] Per-pair history panel
+- [ ] Read the Stock column → skip dust orders → thin-top warning
+- [ ] English/Portuguese language toggle
+- [ ] Phase 2: multi-pair profiles, watch mode, cycle P&L
 
 ## Credits
 

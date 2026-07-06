@@ -1,0 +1,50 @@
+using System.Runtime.InteropServices;
+
+namespace PoE2FlipOverlay.App;
+
+/// <summary>
+/// Thin Win32 interop layer for the two things WPF can't do on its own:
+/// making the window click-through, and registering a global hotkey.
+/// </summary>
+internal static class NativeMethods
+{
+    // --- Extended window styles (for click-through) ---
+    public const int GWL_EXSTYLE = -20;
+    public const int WS_EX_TRANSPARENT = 0x00000020; // mouse events fall through to the window below
+    public const int WS_EX_LAYERED = 0x00080000;
+    public const int WS_EX_TOOLWINDOW = 0x00000080;  // keep the overlay out of Alt+Tab
+
+    // --- Global hotkeys ---
+    public const int WM_HOTKEY = 0x0312;
+    public const uint MOD_ALT = 0x0001;
+    public const uint MOD_CONTROL = 0x0002;
+    public const uint MOD_SHIFT = 0x0004;
+    public const uint MOD_WIN = 0x0008;
+    public const uint MOD_NOREPEAT = 0x4000;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    /// <summary>Adds or removes the click-through extended styles on a window.</summary>
+    public static void SetClickThrough(IntPtr hWnd, bool enabled)
+    {
+        var style = (long)GetWindowLongPtr(hWnd, GWL_EXSTYLE);
+        if (enabled)
+            style |= WS_EX_TRANSPARENT | WS_EX_LAYERED;
+        else
+            style &= ~(long)WS_EX_TRANSPARENT; // keep LAYERED; only drop transparency to clicks
+
+        SetWindowLongPtr(hWnd, GWL_EXSTYLE, new IntPtr(style));
+    }
+}

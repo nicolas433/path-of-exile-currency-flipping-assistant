@@ -42,3 +42,23 @@ public readonly record struct FlipResult(
     decimal Profit,
     decimal MarginPercent,
     FlipWarning Warning);
+
+/// <summary>
+/// A concrete, placeable flip in whole orbs, scaled to a divine budget.
+/// These are the exact numbers to type into the two Currency Exchange orders.
+/// </summary>
+/// <param name="BuyGiveDivine">Divines you commit on the buy order.</param>
+/// <param name="BuyGetFracturing">Fracturing you receive from the buy order.</param>
+/// <param name="SellGiveFracturing">Fracturing you commit on the sell order (what you bought).</param>
+/// <param name="SellGetDivine">Divines you receive from the sell order.</param>
+/// <param name="Profit">Net divines after the full cycle (SellGetDivine − BuyGiveDivine).</param>
+public readonly record struct FlipPlan(
+    long BuyGiveDivine,
+    long BuyGetFracturing,
+    long SellGiveFracturing,
+    long SellGetDivine,
+    decimal Profit)
+{
+    /// <summary>False when the budget can't afford even one whole unit of the buy ratio.</summary>
+    public bool IsPlaceable => BuyGetFracturing > 0;
+}

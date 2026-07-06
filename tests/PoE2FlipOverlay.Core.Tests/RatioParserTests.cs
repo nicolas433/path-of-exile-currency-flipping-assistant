@@ -47,6 +47,18 @@ public class RatioParserTests
         Assert.DoesNotContain(13.86m, book.Bids);
     }
 
+    [Theory]
+    [InlineData("< 13.86 : 1")]
+    [InlineData("« 13.86 : 1")]  // how Windows OCR actually renders the '<' marker
+    [InlineData("‹ 13.86 : 1")]
+    [InlineData("≤ 13.86 : 1")]
+    public void Parse_ignores_aggregate_markers_however_ocr_renders_them(string aggregateLine)
+    {
+        var book = RatioParser.Parse("14.50 : 1\n" + aggregateLine);
+
+        Assert.Equal(new[] { 14.50m }, book.Bids);
+    }
+
     [Fact]
     public void Parse_treats_semicolon_as_colon()
     {

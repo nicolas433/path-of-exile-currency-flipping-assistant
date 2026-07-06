@@ -1,0 +1,24 @@
+<Window x:Class="PoE2FlipOverlay.App.CalibrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Calibração"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="#01000000"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        Cursor="Cross"
+        FontFamily="Segoe UI">
+
+    <Canvas x:Name="RootCanvas" Background="#66000000">
+        <Rectangle x:Name="SelRect"
+                   Stroke="#C9AA71" StrokeThickness="2"
+                   Fill="#22C9AA71" Visibility="Collapsed"/>
+        <Border Canvas.Left="0" Canvas.Top="0"
+                Background="#CC1C1915" Padding="16,10" CornerRadius="0,0,8,0">
+            <TextBlock x:Name="InstructionText" Foreground="#E8DFC8" FontSize="14"
+                       Text="Arraste um retângulo  ·  Esc cancela"/>
+        </Border>
+    </Canvas>
+</Window>

@@ -1,0 +1,16 @@
+<Application x:Class="PoE2FlipOverlay.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <!-- Palette lifted from the HTML prototype so the overlay feels PoE-native. -->
+        <SolidColorBrush x:Key="PanelBackground" Color="#F21C1915"/>
+        <SolidColorBrush x:Key="PanelBorder" Color="#4A4232"/>
+        <SolidColorBrush x:Key="Gold" Color="#C9AA71"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="#E8DFC8"/>
+        <SolidColorBrush x:Key="TextMuted" Color="#A89A80"/>
+        <SolidColorBrush x:Key="TextFaint" Color="#7A715F"/>
+        <SolidColorBrush x:Key="ProfitPos" Color="#7FC97F"/>
+        <SolidColorBrush x:Key="ProfitNeg" Color="#E06C5A"/>
+        <SolidColorBrush x:Key="BigBackground" Color="#26221A"/>
+    </Application.Resources>
+</Application>

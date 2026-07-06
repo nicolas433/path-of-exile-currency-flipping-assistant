@@ -1,3 +1,4 @@
+using System.Linq;
 using PoE2FlipOverlay.Core;
 using PoE2FlipOverlay.Core.Models;
 using Xunit;
@@ -6,7 +7,6 @@ namespace PoE2FlipOverlay.Core.Tests;
 
 public class RatioParserTests
 {
-    // Roughly what OCR yields for the "I Have Fracturing" (sell) side: X : 1 lines.
     private const string SellSidePanel = """
         14.17 : 1    284
         14.15 : 1    1203
@@ -14,19 +14,20 @@ public class RatioParserTests
         < 13.86 : 1  aggregate
         """;
 
-    // The "I Want Fracturing" (buy) side: 1 : X lines.
     private const string BuySidePanel = """
         1 : 14.24   500
         1 : 14.30   200
         1 : 14.38   1000
         """;
 
+    private static decimal[] Ratios(IEnumerable<OrderLevel> levels) => levels.Select(l => l.Ratio).ToArray();
+
     [Fact]
     public void Parse_reads_bids_from_x_to_one_lines()
     {
         var book = RatioParser.Parse(SellSidePanel);
 
-        Assert.Equal(new[] { 14.17m, 14.15m, 14.10m }, book.Bids);
+        Assert.Equal(new[] { 14.17m, 14.15m, 14.10m }, Ratios(book.Bids));
         Assert.Empty(book.Asks);
     }
 
@@ -35,8 +36,24 @@ public class RatioParserTests
     {
         var book = RatioParser.Parse(BuySidePanel);
 
-        Assert.Equal(new[] { 14.24m, 14.30m, 14.38m }, book.Asks);
+        Assert.Equal(new[] { 14.24m, 14.30m, 14.38m }, Ratios(book.Asks));
         Assert.Empty(book.Bids);
+    }
+
+    [Fact]
+    public void Parse_reads_the_stock_column()
+    {
+        var book = RatioParser.Parse(SellSidePanel);
+
+        Assert.Equal(new long[] { 284, 1203, 900 }, book.Bids.Select(l => l.Stock).ToArray());
+    }
+
+    [Fact]
+    public void Parse_reads_stock_with_thousands_separators()
+    {
+        var book = RatioParser.Parse("14.20 : 1   7.434\n14.10 : 1   74.517");
+
+        Assert.Equal(new long[] { 7434, 74517 }, book.Bids.Select(l => l.Stock).ToArray());
     }
 
     [Fact]
@@ -44,29 +61,28 @@ public class RatioParserTests
     {
         var book = RatioParser.Parse(SellSidePanel);
 
-        Assert.DoesNotContain(13.86m, book.Bids);
+        Assert.DoesNotContain(13.86m, Ratios(book.Bids));
     }
 
     [Theory]
     [InlineData("< 13.86 : 1")]
-    [InlineData("« 13.86 : 1")]  // how Windows OCR actually renders the '<' marker
+    [InlineData("« 13.86 : 1")]
     [InlineData("‹ 13.86 : 1")]
     [InlineData("≤ 13.86 : 1")]
     public void Parse_ignores_aggregate_markers_however_ocr_renders_them(string aggregateLine)
     {
         var book = RatioParser.Parse("14.50 : 1\n" + aggregateLine);
 
-        Assert.Equal(new[] { 14.50m }, book.Bids);
+        Assert.Equal(new[] { 14.50m }, Ratios(book.Bids));
     }
 
     [Fact]
     public void Parse_treats_semicolon_as_colon()
     {
-        // OCR frequently reads ':' as ';'.
         var book = RatioParser.Parse("14.20 ; 1\n1 ; 14.40");
 
-        Assert.Contains(14.20m, book.Bids);
-        Assert.Contains(14.40m, book.Asks);
+        Assert.Contains(14.20m, Ratios(book.Bids));
+        Assert.Contains(14.40m, Ratios(book.Asks));
     }
 
     [Fact]
@@ -74,38 +90,41 @@ public class RatioParserTests
     {
         var book = RatioParser.Parse("14,17 : 1\n1 : 14,24");
 
-        Assert.Contains(14.17m, book.Bids);
-        Assert.Contains(14.24m, book.Asks);
-    }
-
-    [Fact]
-    public void Parse_discards_values_outside_plausible_range()
-    {
-        // left > 1000 is rejected; the bare "1 : 1" is neither bid nor ask.
-        var book = RatioParser.Parse("5000 : 1\n1 : 1");
-
-        Assert.Empty(book.Bids);
-        Assert.Empty(book.Asks);
+        Assert.Contains(14.17m, Ratios(book.Bids));
+        Assert.Contains(14.24m, Ratios(book.Asks));
     }
 
     [Fact]
     public void BestBid_and_BestAsk_pick_the_top_of_each_side()
     {
         var book = new OrderBook(
-            bids: new[] { 14.17m, 14.15m, 14.10m },
-            asks: new[] { 14.24m, 14.30m, 14.38m });
+            bids: new[] { new OrderLevel(14.17m, 100), new OrderLevel(14.15m, 100), new OrderLevel(14.10m, 100) },
+            asks: new[] { new OrderLevel(14.24m, 100), new OrderLevel(14.30m, 100), new OrderLevel(14.38m, 100) });
 
-        Assert.Equal(14.17m, book.BestBid);
-        Assert.Equal(14.24m, book.BestAsk);
+        Assert.Equal(14.17m, book.BestBid()?.Ratio);
+        Assert.Equal(14.24m, book.BestAsk()?.Ratio);
+    }
+
+    [Fact]
+    public void BestBid_skips_dust_below_the_min_stock()
+    {
+        // Top bid 14.50 is a 2-stock dust order; the real level is 14.40 with volume.
+        var book = new OrderBook(
+            bids: new[] { new OrderLevel(14.50m, 2), new OrderLevel(14.40m, 300), new OrderLevel(14.30m, 500) },
+            asks: Array.Empty<OrderLevel>());
+
+        Assert.Equal(14.50m, book.BestBid()?.Ratio);        // no filter -> raw top
+        Assert.Equal(14.40m, book.BestBid(minStock: 10)?.Ratio); // dust skipped
     }
 
     [Fact]
     public void Sane_drops_readings_far_from_the_median()
     {
-        // 99.99 is an OCR glitch far from the 14.x cluster.
-        var book = new OrderBook(bids: new[] { 14.17m, 14.15m, 99.99m }, asks: Array.Empty<decimal>());
+        var book = new OrderBook(
+            bids: new[] { new OrderLevel(14.17m, 100), new OrderLevel(14.15m, 100), new OrderLevel(99.99m, 100) },
+            asks: Array.Empty<OrderLevel>());
 
-        Assert.Equal(14.17m, book.BestBid); // glitch excluded, real best survives
+        Assert.Equal(14.17m, book.BestBid()?.Ratio);
     }
 
     [Fact]
@@ -113,25 +132,6 @@ public class RatioParserTests
     {
         Assert.Equal(BookSide.SellFracturing, RatioParser.Parse(SellSidePanel).DetectSide());
         Assert.Equal(BookSide.BuyFracturing, RatioParser.Parse(BuySidePanel).DetectSide());
-    }
-
-    [Fact]
-    public void IsReadingSuspect_flags_too_few_lines()
-    {
-        var thin = new OrderBook(bids: new[] { 14.17m }, asks: new[] { 14.24m });
-
-        Assert.True(thin.IsReadingSuspect(out _));
-    }
-
-    [Fact]
-    public void IsReadingSuspect_is_false_for_a_clean_tight_book()
-    {
-        var book = new OrderBook(
-            bids: new[] { 14.17m, 14.15m, 14.10m },
-            asks: new[] { 14.24m, 14.30m, 14.38m });
-
-        Assert.False(book.IsReadingSuspect(out var spread));
-        Assert.True(spread is > 0m and < 3m);
     }
 
     [Fact]

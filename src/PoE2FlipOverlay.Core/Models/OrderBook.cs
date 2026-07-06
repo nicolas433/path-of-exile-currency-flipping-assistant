@@ -2,41 +2,30 @@ namespace PoE2FlipOverlay.Core.Models;
 
 /// <summary>
 /// Which side of the Currency Exchange a captured ratio panel represents.
-/// In PoE2 the ratio panel always shows the order book of the OPPOSITE side
-/// of the order you are creating.
 /// </summary>
 public enum BookSide
 {
     Unknown,
-
-    /// <summary>
-    /// Panel dominated by "X : 1" lines — buyers offering X divines for 1
-    /// fracturing (bids). This is what you see while creating a SELL order.
-    /// </summary>
-    SellFracturing,
-
-    /// <summary>
-    /// Panel dominated by "1 : X" lines — sellers asking X divines per
-    /// fracturing (asks). This is what you see while creating a BUY order.
-    /// </summary>
-    BuyFracturing
+    SellFracturing, // "X : 1" bids
+    BuyFracturing   // "1 : X" asks
 }
 
+/// <summary>A single order-book level: a ratio and the stock (volume) available at it.</summary>
+public readonly record struct OrderLevel(decimal Ratio, long Stock);
+
 /// <summary>
-/// Ratios extracted from one or more captures of the ratio panel.
-/// <para>Bids are the "X : 1" values (divines offered per 1 fracturing);
-/// asks are the "1 : X" values (divines asked per 1 fracturing).</para>
-/// Readings from several captures can be merged into a single book.
+/// Levels extracted from one or more captures of the ratio panel. Bids are the
+/// "X : 1" values (divines per fracturing); asks are the "1 : X" values.
 /// </summary>
 public sealed class OrderBook
 {
     /// <summary>How far a reading may deviate from its side's median before being discarded.</summary>
     public const decimal OutlierTolerance = 0.10m;
 
-    public IReadOnlyList<decimal> Bids { get; }
-    public IReadOnlyList<decimal> Asks { get; }
+    public IReadOnlyList<OrderLevel> Bids { get; }
+    public IReadOnlyList<OrderLevel> Asks { get; }
 
-    public OrderBook(IEnumerable<decimal> bids, IEnumerable<decimal> asks)
+    public OrderBook(IEnumerable<OrderLevel> bids, IEnumerable<OrderLevel> asks)
     {
         Bids = bids.ToList();
         Asks = asks.ToList();
@@ -44,16 +33,27 @@ public sealed class OrderBook
 
     public bool HasBothSides => Bids.Count > 0 && Asks.Count > 0;
 
-    /// <summary>Best (highest) bid after discarding outliers; <c>null</c> if no bids were read.</summary>
-    public decimal? BestBid => Sane(Bids) is { Count: > 0 } s ? s.Max() : null;
-
-    /// <summary>Best (lowest) ask after discarding outliers; <c>null</c> if no asks were read.</summary>
-    public decimal? BestAsk => Sane(Asks) is { Count: > 0 } s ? s.Min() : null;
-
     /// <summary>
-    /// Guesses which side this book was captured from by comparing how many
-    /// bid vs ask lines were read.
+    /// Best (highest) bid, ignoring outliers and dust — levels whose stock is
+    /// known (&gt; 0) but below <paramref name="minStock"/>. Returns null if empty.
     /// </summary>
+    public OrderLevel? BestBid(long minStock = 0) => Best(Bids, minStock, highest: true);
+
+    /// <summary>Best (lowest) ask, ignoring outliers and dust. Returns null if empty.</summary>
+    public OrderLevel? BestAsk(long minStock = 0) => Best(Asks, minStock, highest: false);
+
+    private static OrderLevel? Best(IReadOnlyList<OrderLevel> levels, long minStock, bool highest)
+    {
+        var sane = Sane(levels);
+        if (sane.Count == 0) return null;
+
+        // Drop dust (stock known and below the threshold); keep unknown-stock (0).
+        var eligible = sane.Where(l => l.Stock <= 0 || l.Stock >= minStock).ToList();
+        if (eligible.Count == 0) eligible = sane.ToList();
+
+        return highest ? eligible.MaxBy(l => l.Ratio) : eligible.MinBy(l => l.Ratio);
+    }
+
     public BookSide DetectSide()
     {
         if (Bids.Count > Asks.Count) return BookSide.SellFracturing;
@@ -62,14 +62,13 @@ public sealed class OrderBook
     }
 
     /// <summary>
-    /// Flags a reading that is probably wrong: fewer than three lines on either
-    /// side, or a spread wider than 3% (a line was likely skipped at the top).
+    /// Flags a probably-wrong reading: fewer than three lines per side, or a
+    /// spread wider than 3%.
     /// </summary>
-    /// <param name="spreadPercent">The computed spread, or 0 when a side is missing.</param>
     public bool IsReadingSuspect(out decimal spreadPercent)
     {
         spreadPercent = 0m;
-        if (BestBid is not { } bid || BestAsk is not { } ask || bid == 0m)
+        if (BestBid()?.Ratio is not { } bid || BestAsk()?.Ratio is not { } ask || bid == 0m)
             return true;
 
         spreadPercent = (ask - bid) / bid * 100m;
@@ -77,19 +76,18 @@ public sealed class OrderBook
     }
 
     /// <summary>
-    /// Discards readings more than <see cref="OutlierTolerance"/> away from the
-    /// median of their own side (defends against OCR misreads). Falls back to
-    /// the original list if the filter would empty it.
+    /// Discards levels more than <see cref="OutlierTolerance"/> from the median
+    /// ratio of their side. Falls back to the original list if that empties it.
     /// </summary>
-    public static IReadOnlyList<decimal> Sane(IReadOnlyList<decimal> values)
+    public static IReadOnlyList<OrderLevel> Sane(IReadOnlyList<OrderLevel> levels)
     {
-        if (values.Count == 0) return values;
+        if (levels.Count == 0) return levels;
 
-        var sorted = values.OrderBy(v => v).ToList();
+        var sorted = levels.Select(l => l.Ratio).OrderBy(v => v).ToList();
         var median = sorted[sorted.Count / 2];
-        if (median == 0m) return values;
+        if (median == 0m) return levels;
 
-        var ok = values.Where(v => Math.Abs(v - median) / median <= OutlierTolerance).ToList();
-        return ok.Count > 0 ? ok : values;
+        var ok = levels.Where(l => Math.Abs(l.Ratio - median) / median <= OutlierTolerance).ToList();
+        return ok.Count > 0 ? ok : levels;
     }
 }

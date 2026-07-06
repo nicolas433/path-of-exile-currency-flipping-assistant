@@ -29,15 +29,15 @@ public partial class OverlayWindow : Window
 
     // Capture / OCR state (Step C).
     private ScreenTextReader? _reader;
-    private IReadOnlyList<decimal> _bids = Array.Empty<decimal>();
-    private IReadOnlyList<decimal> _asks = Array.Empty<decimal>();
-    private string? _wantName;
-    private string? _haveName;
+    private IReadOnlyList<OrderLevel> _bids = Array.Empty<OrderLevel>();
+    private IReadOnlyList<OrderLevel> _asks = Array.Empty<OrderLevel>();
+    private string? _itemName;   // the currency being flipped (the "1" side of the ratio)
+    private string? _valueName;  // the currency you pay/receive in (the budget currency)
 
     private readonly HistoryStore _history = new();
 
     // Remembered so we can re-render when the budget changes.
-    private OrderBook _lastBook = new(Array.Empty<decimal>(), Array.Empty<decimal>());
+    private OrderBook _lastBook = new(Array.Empty<OrderLevel>(), Array.Empty<OrderLevel>());
     private FlipResult _lastResult;
 
     public OverlayWindow()
@@ -203,34 +203,47 @@ public partial class OverlayWindow : Window
             var readout = await _reader.ReadDetailedFileAsync(png, upscaleFactor: 1);
             var text = readout.Text;
 
+            var book = RatioParser.Parse(text);
+
             // Scrape the two names by position (works for any currency); fall back
             // to the known-currency list if a side comes out empty.
             var (want, have) = ScrapeNames(readout.Words);
             var (knownFirst, knownSecond) = CurrencyNames.DetectPair(text);
             want ??= knownFirst;
             have ??= knownSecond;
-            if (!string.IsNullOrWhiteSpace(want)) _wantName = want;
-            if (!string.IsNullOrWhiteSpace(have)) _haveName = have;
 
-            var book = RatioParser.Parse(text);
+            // Map left/right names to item (the "1" side) / value (the priced side)
+            // using this capture's orientation, so labels stay consistent per side.
+            switch (book.DetectSide())
+            {
+                case BookSide.BuyFracturing: // asks "1 : X" -> item is the wanted (left) currency
+                    if (!string.IsNullOrWhiteSpace(want)) _itemName = want;
+                    if (!string.IsNullOrWhiteSpace(have)) _valueName = have;
+                    break;
+                case BookSide.SellFracturing: // bids "X : 1" -> item is the had (right) currency
+                    if (!string.IsNullOrWhiteSpace(have)) _itemName = have;
+                    if (!string.IsNullOrWhiteSpace(want)) _valueName = want;
+                    break;
+            }
             if (book.Bids.Count > 0) _bids = book.Bids; // sell-side panel
             if (book.Asks.Count > 0) _asks = book.Asks; // buy-side panel
 
             UpdateHeader();
 
             var combined = new OrderBook(_bids, _asks);
-            if (combined.HasBothSides)
+            var bidLevel = combined.BestBid(_config.DustStock);
+            var askLevel = combined.BestAsk(_config.DustStock);
+
+            if (bidLevel is { } bid && askLevel is { } ask)
             {
                 var flip = FlipCalculator.Calculate(
-                    new FlipInput(combined.BestBid!.Value, combined.BestAsk!.Value, _config.Budget, _config.Tick));
+                    new FlipInput(bid.Ratio, ask.Ratio, _config.Budget, _config.Tick));
                 Render(combined, flip);
 
-                _history.Record(PairLabel(), combined.BestBid!.Value, combined.BestAsk!.Value,
-                    flip.MarginPercent, flip.Profit);
+                _history.Record(PairLabel(), bid.Ratio, ask.Ratio, flip.MarginPercent, flip.Profit);
                 UpdateHistoryEmpty();
 
-                var suspect = combined.IsReadingSuspect(out _) ? " ⚠ leitura suspeita, confira" : "";
-                HintText.Text = $"lido: {combined.Bids.Count} bids / {combined.Asks.Count} asks{suspect}";
+                HintText.Text = BuildReadStatus(combined, bid, ask);
             }
             else
             {
@@ -252,8 +265,8 @@ public partial class OverlayWindow : Window
     /// <summary>Stable label for the current pair (order-independent) for history keying.</summary>
     private string PairLabel()
     {
-        var a = string.IsNullOrWhiteSpace(_wantName) ? null : _wantName!.Trim();
-        var b = string.IsNullOrWhiteSpace(_haveName) ? null : _haveName!.Trim();
+        var a = string.IsNullOrWhiteSpace(_itemName) ? null : _itemName!.Trim();
+        var b = string.IsNullOrWhiteSpace(_valueName) ? null : _valueName!.Trim();
 
         if (a is null && b is null) return "par não identificado";
         if (a is null || b is null) return $"{a ?? b} × ?";
@@ -263,8 +276,20 @@ public partial class OverlayWindow : Window
 
     private void UpdateHeader()
     {
-        if (!string.IsNullOrWhiteSpace(_wantName) && !string.IsNullOrWhiteSpace(_haveName))
-            HeaderTitle.Text = $"⚖ {_wantName} × {_haveName}";
+        if (!string.IsNullOrWhiteSpace(_itemName) && !string.IsNullOrWhiteSpace(_valueName))
+            HeaderTitle.Text = $"⚖ {_itemName} × {_valueName}";
+    }
+
+    private string ValueLabel() => string.IsNullOrWhiteSpace(_valueName) ? "div" : ShortName(_valueName!);
+    private string ItemLabel() => string.IsNullOrWhiteSpace(_itemName) ? "frac" : ShortName(_itemName!);
+
+    /// <summary>Compact currency name for inline order lines ("Divine Orb" -> "Divine").</summary>
+    private static string ShortName(string name)
+    {
+        var n = name.Trim();
+        if (n.EndsWith(" Orb", StringComparison.OrdinalIgnoreCase))
+            n = n[..^4].Trim();
+        return n;
     }
 
     // Words that are UI labels, not currency names.
@@ -339,10 +364,16 @@ public partial class OverlayWindow : Window
 
     private void ShowDemo()
     {
+        _itemName = "Fracturing Orb";
+        _valueName = "Divine Orb";
         // Chosen so the placeable orders land on tidy pairs: buy 14.33 = 43:3, sell 15.00 = 15:1.
-        var book = new OrderBook(bids: new[] { 14.32m }, asks: new[] { 15.01m });
+        var book = new OrderBook(
+            bids: new[] { new OrderLevel(14.32m, 400) },
+            asks: new[] { new OrderLevel(15.01m, 300) });
+        var bid = book.BestBid()!.Value;
+        var ask = book.BestAsk()!.Value;
         var result = FlipCalculator.Calculate(
-            new FlipInput(book.BestBid!.Value, book.BestAsk!.Value, _config.Budget, _config.Tick));
+            new FlipInput(bid.Ratio, ask.Ratio, _config.Budget, _config.Tick));
         Render(book, result);
     }
 
@@ -354,17 +385,20 @@ public partial class OverlayWindow : Window
 
         BuyPrice.Text = Fmt(result.BuyPrice);
         SellPrice.Text = Fmt(result.SellPrice);
-        BookRead.Text = $"{Fmt(book.BestBid ?? 0)} / {Fmt(book.BestAsk ?? 0)}";
+        BookRead.Text = $"{FmtLevel(book.BestBid(_config.DustStock))} / {FmtLevel(book.BestAsk(_config.DustStock))}";
         MarginValue.Text = Fmt(result.MarginPercent) + "%";
 
         // Largest whole-orb order the budget affords, on the safe side of the book.
         var plan = FlipPlanner.Plan(_config.Budget, result.BuyPrice, result.SellPrice);
 
+        string value = ValueLabel(), item = ItemLabel();
+        BudgetLabel.Text = $"{value} que tenho";
+
         if (plan.IsPlaceable)
         {
-            BuyOrder.Text = $"{plan.BuyGiveDivine} div → {plan.BuyGetFracturing} frac";
-            SellOrder.Text = $"{plan.SellGiveFracturing} frac → {plan.SellGetDivine} div";
-            Profit.Text = (plan.Profit >= 0 ? "+" : "") + Fmt(plan.Profit) + " div";
+            BuyOrder.Text = $"{plan.BuyGiveDivine} {value} → {plan.BuyGetFracturing} {item}";
+            SellOrder.Text = $"{plan.SellGiveFracturing} {item} → {plan.SellGetDivine} {value}";
+            Profit.Text = (plan.Profit >= 0 ? "+" : "") + Fmt(plan.Profit) + " " + value;
             Profit.Foreground = (Brush)FindResource(plan.Profit > 0 ? "ProfitPos" : "ProfitNeg");
         }
         else
@@ -404,4 +438,27 @@ public partial class OverlayWindow : Window
 
     private static string Fmt(decimal value) =>
         value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string FmtLevel(OrderLevel? level) =>
+        level is { } l ? (l.Stock > 0 ? $"{Fmt(l.Ratio)} (v{l.Stock})" : Fmt(l.Ratio)) : "—";
+
+    /// <summary>Read-status line with dust/thin-top/suspect notes.</summary>
+    private string BuildReadStatus(OrderBook book, OrderLevel bid, OrderLevel ask)
+    {
+        var notes = new List<string>();
+
+        // Did the dust filter move us off the raw top of book?
+        if (book.BestBid(0)?.Ratio != bid.Ratio || book.BestAsk(0)?.Ratio != ask.Ratio)
+            notes.Add("pulei ordem-poeira");
+
+        if ((bid.Stock > 0 && bid.Stock < _config.ThinStock) ||
+            (ask.Stock > 0 && ask.Stock < _config.ThinStock))
+            notes.Add("topo fininho");
+
+        if (book.IsReadingSuspect(out _))
+            notes.Add("leitura suspeita, confira");
+
+        var suffix = notes.Count > 0 ? " · ⚠ " + string.Join(" · ", notes) : "";
+        return $"lido: {book.Bids.Count} bids / {book.Asks.Count} asks{suffix}";
+    }
 }

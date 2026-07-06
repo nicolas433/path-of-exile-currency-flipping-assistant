@@ -121,7 +121,7 @@
 
             <!-- Budget input (editable in interactive mode) -->
             <Grid Margin="0,0,0,4">
-                <TextBlock Text="divines que tenho" Foreground="{StaticResource TextMuted}"
+                <TextBlock x:Name="BudgetLabel" Text="divines que tenho" Foreground="{StaticResource TextMuted}"
                            FontSize="12" VerticalAlignment="Center"/>
                 <TextBox x:Name="BudgetInput" Width="84" HorizontalAlignment="Right"
                          HorizontalContentAlignment="Right"

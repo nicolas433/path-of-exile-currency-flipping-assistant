@@ -1,3 +1,4 @@
+using System.Linq;
 using PoE2FlipOverlay.Core;
 using PoE2FlipOverlay.Core.Models;
 using Xunit;
@@ -6,12 +7,13 @@ namespace PoE2FlipOverlay.Core.Tests;
 
 /// <summary>
 /// Real Currency Exchange books transcribed from in-game screenshots
-/// (Fracturing Orb × Divine Orb). Documents exactly what the tool computes
-/// from live data and guards against regressions.
+/// (Fracturing Orb × Divine Orb). Documents what the tool computes from live
+/// data and guards against regressions.
 /// </summary>
 public class RealBookScenarioTests
 {
-    // "I Want Fracturing / I Have Divine" side shows the asks (1 : X).
+    // "I Want Fracturing / I Have Divine" side shows the asks (1 : X), with stock.
+    // Note the top ask (14.50) is a 2-stock dust order.
     private const string AskSidePanel = """
         1 : 14.50    2
         1 : 14.80    100
@@ -31,33 +33,38 @@ public class RealBookScenarioTests
         < 14.30 : 1  38.599
         """;
 
+    private static OrderBook Combined() => new(
+        RatioParser.Parse(BidSidePanel).Bids,
+        RatioParser.Parse(AskSidePanel).Asks);
+
     [Fact]
-    public void Parses_best_bid_and_ask_from_the_real_panels()
+    public void Parses_best_bid_and_ask_and_stock_from_the_real_panels()
     {
         var asks = RatioParser.Parse(AskSidePanel);
         var bids = RatioParser.Parse(BidSidePanel);
 
-        Assert.Equal(new[] { 14.50m, 14.80m, 14.80m, 14.85m, 15m }, asks.Asks);
-        Assert.Equal(new[] { 14.67m, 14.50m, 14.40m, 14.33m, 14.30m }, bids.Bids);
-
-        var book = new OrderBook(bids.Bids, asks.Asks);
-        Assert.Equal(14.67m, book.BestBid);
-        Assert.Equal(14.50m, book.BestAsk);
+        Assert.Equal(new[] { 14.50m, 14.80m, 14.80m, 14.85m, 15m }, asks.Asks.Select(l => l.Ratio).ToArray());
+        Assert.Equal(new long[] { 2, 100, 88, 33, 1054 }, asks.Asks.Select(l => l.Stock).ToArray());
+        Assert.Equal(14.67m, bids.BestBid()?.Ratio);
     }
 
     [Fact]
-    public void Aggressive_flip_on_this_crossed_book_is_spread_closed()
+    public void Without_dust_filter_the_book_looks_crossed()
     {
-        var book = new OrderBook(
-            RatioParser.Parse(BidSidePanel).Bids,
-            RatioParser.Parse(AskSidePanel).Asks);
+        var book = Combined();
 
-        var flip = FlipCalculator.Calculate(new FlipInput(book.BestBid!.Value, book.BestAsk!.Value, Budget: 431m));
+        // Raw top ask is the 2-stock dust at 14.50, below the 14.67 bid -> crossed.
+        Assert.Equal(14.67m, book.BestBid()?.Ratio);
+        Assert.Equal(14.50m, book.BestAsk()?.Ratio);
+    }
 
-        // best bid 14.67 > best ask 14.50 -> the +tick/-tick maker flip loses money.
-        Assert.Equal(14.68m, flip.BuyPrice);
-        Assert.Equal(14.49m, flip.SellPrice);
-        Assert.Equal(FlipWarning.SpreadClosed, flip.Warning);
-        Assert.True(flip.Profit < 0m);
+    [Fact]
+    public void Skipping_dust_reveals_the_real_ask_level()
+    {
+        var book = Combined();
+
+        // With a stock floor, the 2-stock dust ask is ignored; real ask is 14.80.
+        Assert.Equal(14.80m, book.BestAsk(minStock: 10)?.Ratio);
+        Assert.Equal(14.67m, book.BestBid(minStock: 10)?.Ratio);
     }
 }

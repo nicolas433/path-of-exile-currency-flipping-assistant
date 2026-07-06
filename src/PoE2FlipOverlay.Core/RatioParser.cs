@@ -20,6 +20,10 @@ public static partial class RatioParser
     [GeneratedRegex(@"\d*\.?\d+")]
     private static partial Regex LeadingNumber();
 
+    // A stock number after the ratio (e.g. "40", "7.434"); separators are thousands.
+    [GeneratedRegex(@"\d[\d.,]*")]
+    private static partial Regex StockToken();
+
     // The game marks aggregated worse offers with a leading "<". OCR often
     // renders that glyph as a guillemet or other angle character, so we treat
     // any of these as the aggregate marker.
@@ -39,8 +43,8 @@ public static partial class RatioParser
     /// </summary>
     public static OrderBook Parse(string? text)
     {
-        var bids = new List<decimal>();
-        var asks = new List<decimal>();
+        var bids = new List<OrderLevel>();
+        var asks = new List<OrderLevel>();
 
         if (string.IsNullOrEmpty(text))
             return new OrderBook(bids, asks);
@@ -60,15 +64,32 @@ public static partial class RatioParser
             if (left is null || right is null)
                 continue;
 
+            // The stock column sits after the ratio on the same line.
+            long stock = ExtractStock(line, match.Index + match.Length);
+
             // "14.20 : 1" -> someone paying divines per fracturing (BID)
             // "1 : 14.38" -> someone asking divines per fracturing (ASK)
             if (IsOne(right.Value) && left.Value is > 1m and < 1000m)
-                bids.Add(left.Value);
+                bids.Add(new OrderLevel(left.Value, stock));
             else if (IsOne(left.Value) && right.Value is > 1m and < 1000m)
-                asks.Add(right.Value);
+                asks.Add(new OrderLevel(right.Value, stock));
         }
 
         return new OrderBook(bids, asks);
+    }
+
+    /// <summary>Reads the stock number that follows the ratio on the line (0 if none).</summary>
+    private static long ExtractStock(string line, int from)
+    {
+        if (from < 0 || from >= line.Length)
+            return 0;
+
+        var match = StockToken().Match(line[from..]);
+        if (!match.Success)
+            return 0;
+
+        var digits = match.Value.Replace(".", "").Replace(",", "");
+        return long.TryParse(digits, out var stock) ? stock : 0;
     }
 
     private static bool IsOne(decimal value) => Math.Abs(value - 1m) < 0.001m;

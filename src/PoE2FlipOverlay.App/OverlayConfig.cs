@@ -11,6 +11,13 @@ public sealed class OverlayConfig
 {
     public decimal Budget { get; set; } = 431m;
     public decimal Tick { get; set; } = 0.01m;
+
+    /// <summary>Levels with stock below this are treated as dust and skipped.</summary>
+    public long DustStock { get; set; } = 5;
+
+    /// <summary>If the chosen best level's stock is below this, warn "thin top".</summary>
+    public long ThinStock { get; set; } = 20;
+
     public HotkeyConfig Hotkeys { get; set; } = new();
 
     /// <summary>

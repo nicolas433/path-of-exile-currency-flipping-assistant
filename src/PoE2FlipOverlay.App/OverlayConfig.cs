@@ -9,6 +9,9 @@ namespace PoE2FlipOverlay.App;
 /// </summary>
 public sealed class OverlayConfig
 {
+    /// <summary>UI language: "pt" or "en".</summary>
+    public string Language { get; set; } = "pt";
+
     public decimal Budget { get; set; } = 431m;
     public decimal Tick { get; set; } = 0.01m;
 

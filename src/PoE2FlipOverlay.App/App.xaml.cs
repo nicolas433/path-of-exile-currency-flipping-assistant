@@ -16,8 +16,7 @@ public partial class App : System.Windows.Application
         if (!isFirst)
         {
             System.Windows.MessageBox.Show(
-                "O PoE2 Flip Overlay já está aberto.\n\n" +
-                "Feche a instância atual (bandeja → Sair, ou Ctrl+Shift+X) antes de abrir de novo.",
+                Strings.Get(OverlayConfig.LoadOrCreate().Language).AlreadyOpen,
                 "PoE2 Flip Overlay",
                 System.Windows.MessageBoxButton.OK,
                 System.Windows.MessageBoxImage.Information);

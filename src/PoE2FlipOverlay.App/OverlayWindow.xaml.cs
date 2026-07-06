@@ -17,6 +17,7 @@ namespace PoE2FlipOverlay.App;
 public partial class OverlayWindow : Window
 {
     private OverlayConfig _config = new();
+    private Strings _s = new();
     private readonly Dictionary<int, Action> _hotkeyActions = new();
     private readonly List<string> _failedHotkeys = new();
     private int _nextHotkeyId = 1;
@@ -51,7 +52,10 @@ public partial class OverlayWindow : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         _config = OverlayConfig.LoadOrCreate();
+        _s = Strings.Get(_config.Language);
         _hwnd = new WindowInteropHelper(this).Handle;
+
+        ApplyStrings();
 
         _suppressBudgetEvent = true;
         BudgetInput.Text = _config.Budget.ToString("0.##", CultureInfo.InvariantCulture);
@@ -82,15 +86,57 @@ public partial class OverlayWindow : Window
             Visible = true,
             Text = "PoE2 Flip Overlay"
         };
+        _tray.DoubleClick += (_, _) => ToggleVisible();
+        BuildTrayMenu();
+    }
+
+    private void BuildTrayMenu()
+    {
+        if (_tray is null) return;
 
         var menu = new WinForms.ContextMenuStrip();
-        menu.Items.Add("Mostrar / esconder", null, (_, _) => ToggleVisible());
-        menu.Items.Add("Modo interativo (mover)", null, (_, _) => SetInteractive(!_interactive));
-        menu.Items.Add("Calibrar região do painel…", null, (_, _) => CalibrateRegion());
+        menu.Items.Add(_s.TrayShowHide, null, (_, _) => ToggleVisible());
+        menu.Items.Add(_s.TrayInteractive, null, (_, _) => SetInteractive(!_interactive));
+        menu.Items.Add(_s.TrayCalibrate, null, (_, _) => CalibrateRegion());
+        menu.Items.Add(_s.TrayLanguage, null, (_, _) => ToggleLanguage());
         menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("Sair", null, (_, _) => Close());
+        menu.Items.Add(_s.TrayQuit, null, (_, _) => Close());
+
+        _tray.ContextMenuStrip?.Dispose();
         _tray.ContextMenuStrip = menu;
-        _tray.DoubleClick += (_, _) => ToggleVisible();
+    }
+
+    private void ToggleLanguage()
+    {
+        _config.Language = string.Equals(_config.Language, "en", StringComparison.OrdinalIgnoreCase) ? "pt" : "en";
+        _config.TrySave();
+        _s = Strings.Get(_config.Language);
+
+        ApplyStrings();
+        SetInteractive(_interactive);          // refresh the hint line
+        BuildTrayMenu();
+        Render(_lastBook, _lastResult);         // refresh dynamic labels
+    }
+
+    /// <summary>Applies the current language to the static UI labels.</summary>
+    private void ApplyStrings()
+    {
+        BuyAtLabel.Text = _s.BuyAt;
+        SellAtLabel.Text = _s.SellAt;
+        BidAskLabel.Text = _s.BidAskRead;
+        OrdersHeaderLabel.Text = _s.OrdersHeader;
+        BuyOrderLabel.Text = _s.BuyOrder;
+        SellOrderLabel.Text = _s.SellOrder;
+        ProfitLabel.Text = _s.CycleProfit;
+        MarginLabel.Text = _s.Margin;
+        CalibrateButton.Content = _s.CalibrateButton;
+        HistoryTitle.Text = _s.HistoryTitle;
+        HistoryEmpty.Text = _s.HistoryEmpty;
+
+        if (!string.IsNullOrWhiteSpace(_itemName) && !string.IsNullOrWhiteSpace(_valueName))
+            UpdateHeader();
+        else
+            HeaderTitle.Text = _s.HeaderDefault;
     }
 
     private void CalibrateRegion()
@@ -100,14 +146,13 @@ public partial class OverlayWindow : Window
         Visibility = Visibility.Hidden;
         try
         {
-            var cal = new CalibrationWindow(
-                "Desenhe UM retângulo cobrindo os NOMES das moedas E a lista de ratios") { Owner = this };
+            var cal = new CalibrationWindow(_s.CalibInstruction) { Owner = this };
 
             if (cal.ShowDialog() == true && cal.Result is not null)
             {
                 _config.Capture = cal.Result;
                 _config.TrySave();
-                HintText.Text = $"região salva: {cal.Result} — Num4/Num5 capturam";
+                HintText.Text = string.Format(_s.RegionSaved, cal.Result);
             }
         }
         finally
@@ -136,14 +181,13 @@ public partial class OverlayWindow : Window
         var h = _config.Hotkeys;
         Register(h.HideOverlay, () => Visibility = Visibility.Hidden);
         Register(h.ShowOverlay, ShowOverlay);
-        Register(h.CaptureBuy, () => OnCaptureRequested("compra"));
-        Register(h.CaptureSell, () => OnCaptureRequested("venda"));
+        Register(h.CaptureBuy, () => OnCaptureRequested(isBuy: true));
+        Register(h.CaptureSell, () => OnCaptureRequested(isBuy: false));
         Register(h.ToggleInteractive, () => SetInteractive(!_interactive));
         Register(h.Quit, Close);
 
         if (_failedHotkeys.Count > 0)
-            HintText.Text = "⚠ teclas não registradas: " + string.Join(", ", _failedHotkeys) +
-                            " (conflito? edite config.json)";
+            HintText.Text = string.Format(_s.HotkeysFailed, string.Join(", ", _failedHotkeys));
     }
 
     private void Register(string spec, Action action)
@@ -185,17 +229,19 @@ public partial class OverlayWindow : Window
         Topmost = true;
     }
 
-    private async void OnCaptureRequested(string side)
+    private async void OnCaptureRequested(bool isBuy)
     {
+        var side = isBuy ? _s.SideBuy : _s.SideSell;
+
         if (_config.Capture is null)
         {
-            HintText.Text = "calibre primeiro: clique em ⚙ calibrar região do painel";
+            HintText.Text = _s.CalibrateFirst;
             return;
         }
 
         try
         {
-            HintText.Text = $"capturando ({side})…";
+            HintText.Text = string.Format(_s.Capturing, side);
 
             var png = ScreenCapture.CaptureToPng(_config.Capture, "exchange");
 
@@ -247,13 +293,13 @@ public partial class OverlayWindow : Window
             }
             else
             {
-                var missing = _bids.Count == 0 ? "venda (bids)" : "compra (asks)";
-                HintText.Text = $"lido ({side}): {book.Bids.Count} bids / {book.Asks.Count} asks — falta capturar o lado {missing}";
+                var missing = _bids.Count == 0 ? _s.MissingBids : _s.MissingAsks;
+                HintText.Text = string.Format(_s.MissingSide, side, book.Bids.Count, book.Asks.Count, missing);
             }
         }
         catch (Exception ex)
         {
-            HintText.Text = "erro na captura: " + ex.Message;
+            HintText.Text = string.Format(_s.CaptureError, ex.Message);
         }
     }
 
@@ -332,9 +378,7 @@ public partial class OverlayWindow : Window
             ? (Brush)FindResource("ProfitPos")
             : (Brush)FindResource("TextFaint");
 
-        HintText.Text = interactive
-            ? "🟢 interativo (clicável) · arraste p/ mover · Ctrl+Shift+F → click-through p/ jogar"
-            : "⚪ click-through (cliques passam pro jogo) · Ctrl+Shift+F → interativo p/ editar";
+        HintText.Text = interactive ? _s.HintInteractive : _s.HintClickThrough;
     }
 
     private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -392,7 +436,7 @@ public partial class OverlayWindow : Window
         var plan = FlipPlanner.Plan(_config.Budget, result.BuyPrice, result.SellPrice);
 
         string value = ValueLabel(), item = ItemLabel();
-        BudgetLabel.Text = $"{value} que tenho";
+        BudgetLabel.Text = string.Format(_s.BudgetHave, value);
 
         if (plan.IsPlaceable)
         {
@@ -403,7 +447,7 @@ public partial class OverlayWindow : Window
         }
         else
         {
-            BuyOrder.Text = "orçamento insuficiente";
+            BuyOrder.Text = _s.BudgetInsufficient;
             SellOrder.Text = "—";
             Profit.Text = "—";
         }
@@ -449,16 +493,16 @@ public partial class OverlayWindow : Window
 
         // Did the dust filter move us off the raw top of book?
         if (book.BestBid(0)?.Ratio != bid.Ratio || book.BestAsk(0)?.Ratio != ask.Ratio)
-            notes.Add("pulei ordem-poeira");
+            notes.Add(_s.NoteDust);
 
         if ((bid.Stock > 0 && bid.Stock < _config.ThinStock) ||
             (ask.Stock > 0 && ask.Stock < _config.ThinStock))
-            notes.Add("topo fininho");
+            notes.Add(_s.NoteThin);
 
         if (book.IsReadingSuspect(out _))
-            notes.Add("leitura suspeita, confira");
+            notes.Add(_s.NoteSuspect);
 
-        var suffix = notes.Count > 0 ? " · ⚠ " + string.Join(" · ", notes) : "";
-        return $"lido: {book.Bids.Count} bids / {book.Asks.Count} asks{suffix}";
+        var status = string.Format(_s.ReadStatus, book.Bids.Count, book.Asks.Count);
+        return notes.Count > 0 ? status + " · ⚠ " + string.Join(" · ", notes) : status;
     }
 }

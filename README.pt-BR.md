@@ -53,6 +53,10 @@ Requer o [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (Windows
 - Ou pelo terminal: `dotnet build src\PoE2FlipOverlay.App` e rode o
   `PoE2FlipOverlay.exe` gerado.
 
+Para gerar um build distribuível, dê **duplo-clique no `publish.bat`** — ele cria um
+único `PoE2FlipOverlay.exe` autossuficiente, que roda em qualquer Windows 64-bit,
+mesmo sem o .NET instalado.
+
 **No jogo:** abra a Currency Exchange com a lista de ratios visível, então aperte a
 tecla de captura no lado de compra (`Num4`) e no lado de venda (`Num5`). Alterne
 entre click-through / interativo com `Ctrl+Shift+F`. As configurações ficam no

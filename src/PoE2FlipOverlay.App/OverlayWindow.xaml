@@ -23,7 +23,7 @@
             <DropShadowEffect Color="Black" BlurRadius="16" ShadowDepth="0" Opacity="0.6"/>
         </Border.Effect>
         <StackPanel>
-            <TextBlock Text="histórico" Foreground="{StaticResource Gold}"
+            <TextBlock x:Name="HistoryTitle" Text="histórico" Foreground="{StaticResource Gold}"
                        FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"/>
             <TextBlock x:Name="HistoryEmpty" Text="capture um par pra registrar"
                        Foreground="{StaticResource TextFaint}" FontSize="10" TextWrapping="Wrap"/>
@@ -89,7 +89,7 @@
                     BorderBrush="{StaticResource PanelBorder}" BorderThickness="1"
                     CornerRadius="8" Padding="12,8" Margin="0,0,0,6">
                 <Grid>
-                    <TextBlock Text="COMPRAR a" Foreground="{StaticResource TextMuted}"
+                    <TextBlock x:Name="BuyAtLabel" Text="COMPRAR a" Foreground="{StaticResource TextMuted}"
                                FontSize="12" VerticalAlignment="Center"/>
                     <TextBlock x:Name="BuyPrice" Text="—"
                                Foreground="{StaticResource Gold}"
@@ -103,7 +103,7 @@
                     BorderBrush="{StaticResource PanelBorder}" BorderThickness="1"
                     CornerRadius="8" Padding="12,8" Margin="0,0,0,10">
                 <Grid>
-                    <TextBlock Text="VENDER a" Foreground="{StaticResource TextMuted}"
+                    <TextBlock x:Name="SellAtLabel" Text="VENDER a" Foreground="{StaticResource TextMuted}"
                                FontSize="12" VerticalAlignment="Center"/>
                     <TextBlock x:Name="SellPrice" Text="—"
                                Foreground="{StaticResource Gold}"
@@ -114,7 +114,7 @@
 
             <!-- bid / ask read -->
             <Grid Margin="0,0,0,6">
-                <TextBlock Text="bid / ask lidos" Foreground="{StaticResource TextMuted}" FontSize="12"/>
+                <TextBlock x:Name="BidAskLabel" Text="bid / ask lidos" Foreground="{StaticResource TextMuted}" FontSize="12"/>
                 <TextBlock x:Name="BookRead" Text="—" Foreground="{StaticResource TextPrimary}"
                            FontSize="12" HorizontalAlignment="Right"/>
             </Grid>
@@ -133,26 +133,26 @@
 
             <!-- Placeable whole-orb orders, scaled to the budget -->
             <Separator Margin="0,6,0,4" Background="{StaticResource PanelBorder}"/>
-            <TextBlock Text="ordens a colocar (orbs inteiros)"
+            <TextBlock x:Name="OrdersHeaderLabel" Text="ordens a colocar (orbs inteiros)"
                        Foreground="{StaticResource TextFaint}" FontSize="10" Margin="0,0,0,4"/>
             <Grid Margin="0,0,0,3">
-                <TextBlock Text="COMPRA" Foreground="{StaticResource TextMuted}" FontSize="12"/>
+                <TextBlock x:Name="BuyOrderLabel" Text="COMPRA" Foreground="{StaticResource TextMuted}" FontSize="12"/>
                 <TextBlock x:Name="BuyOrder" Text="—" Foreground="{StaticResource Gold}"
                            FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right"/>
             </Grid>
             <Grid Margin="0,0,0,6">
-                <TextBlock Text="VENDA" Foreground="{StaticResource TextMuted}" FontSize="12"/>
+                <TextBlock x:Name="SellOrderLabel" Text="VENDA" Foreground="{StaticResource TextMuted}" FontSize="12"/>
                 <TextBlock x:Name="SellOrder" Text="—" Foreground="{StaticResource Gold}"
                            FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right"/>
             </Grid>
 
             <Grid Margin="0,0,0,2">
-                <TextBlock Text="lucro do ciclo" Foreground="{StaticResource TextMuted}" FontSize="12"/>
+                <TextBlock x:Name="ProfitLabel" Text="lucro do ciclo" Foreground="{StaticResource TextMuted}" FontSize="12"/>
                 <TextBlock x:Name="Profit" Text="—" Foreground="{StaticResource ProfitPos}"
                            FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right"/>
             </Grid>
             <Grid Margin="0,0,0,2">
-                <TextBlock Text="margem" Foreground="{StaticResource TextMuted}" FontSize="12"/>
+                <TextBlock x:Name="MarginLabel" Text="margem" Foreground="{StaticResource TextMuted}" FontSize="12"/>
                 <TextBlock x:Name="MarginValue" Text="—" Foreground="{StaticResource TextPrimary}"
                            FontSize="12" HorizontalAlignment="Right"/>
             </Grid>

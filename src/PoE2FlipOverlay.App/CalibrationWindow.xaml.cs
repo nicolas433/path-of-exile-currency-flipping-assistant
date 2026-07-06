@@ -27,7 +27,7 @@ public partial class CalibrationWindow : Window
     public CalibrationWindow(string instruction)
     {
         InitializeComponent();
-        InstructionText.Text = instruction + "  ·  Esc cancela";
+        InstructionText.Text = instruction;
 
         Left = 0;
         Top = 0;
